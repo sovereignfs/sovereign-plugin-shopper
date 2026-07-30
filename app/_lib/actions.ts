@@ -13,6 +13,7 @@ import {
   shopperUserState,
 } from '../_db/schema';
 import { suggestCategoryAndIcon } from './icons';
+import { normalize, now } from './helpers';
 import type {
   CombinedItemRow,
   DirectoryUserRow,
@@ -24,21 +25,12 @@ import type {
   SharedListRow,
 } from './types';
 
-/** Trimmed, lowercased form used for catalog dedupe/matching (SHP-04). */
-function normalize(name: string): string {
-  return name.trim().toLowerCase();
-}
-
 // DrizzleClient is typed as `unknown` in the SDK (dialect-agnostic contract).
 // We cast to the SQLite type here since the platform default dialect is SQLite.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Db = BaseSQLiteDatabase<'async', any, any>;
+export type Db = BaseSQLiteDatabase<'async', any, any>;
 
-function now() {
-  return Math.floor(Date.now() / 1000);
-}
-
-async function getContext() {
+export async function getContext() {
   const session = await sdk.auth.requireSession();
   const db = (await sdk.db.getClient()) as Db;
   return { db, userId: session.user.id, tenantId: session.user.tenantId };
@@ -401,6 +393,7 @@ export async function addItemToList(listId: string, name: string): Promise<void>
     sortOrder: nextSortOrder,
     addedBy: userId,
     createdAt: ts,
+    updatedAt: ts,
   });
 }
 
@@ -504,6 +497,7 @@ export async function updateListItem(
       unit: input.unit,
       category: input.category,
       icon: input.icon,
+      updatedAt: ts,
     })
     .where(and(eq(shopperListItems.id, itemId), eq(shopperListItems.tenantId, tenantId)));
 
@@ -562,10 +556,12 @@ export async function toggleItemBought(listId: string, itemId: string): Promise<
     .limit(1);
   if (!item) throw new Error('Item not found.');
 
+  const ts = now();
+
   if (item.checkedAt) {
     await db
       .update(shopperListItems)
-      .set({ checkedAt: null })
+      .set({ checkedAt: null, updatedAt: ts })
       .where(and(eq(shopperListItems.id, itemId), eq(shopperListItems.tenantId, tenantId)));
     await db
       .delete(shopperPurchases)
@@ -575,7 +571,6 @@ export async function toggleItemBought(listId: string, itemId: string): Promise<
     return;
   }
 
-  const ts = now();
   let price: number | null = null;
   if (item.productId) {
     const [product] = await db
@@ -588,7 +583,7 @@ export async function toggleItemBought(listId: string, itemId: string): Promise<
 
   await db
     .update(shopperListItems)
-    .set({ checkedAt: ts })
+    .set({ checkedAt: ts, updatedAt: ts })
     .where(and(eq(shopperListItems.id, itemId), eq(shopperListItems.tenantId, tenantId)));
 
   await db.insert(shopperPurchases).values({

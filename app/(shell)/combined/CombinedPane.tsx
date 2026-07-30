@@ -1,8 +1,8 @@
 'use client';
 
 import { EmptyState, Icon, PageHeader } from '@sovereignfs/ui';
-import { resolveIcon } from '../_lib/icons';
-import type { CombinedItemRow } from '../_lib/types';
+import { resolveIcon } from '../../_lib/icons';
+import type { CombinedItemRow } from '../../_lib/types';
 import styles from './page.module.css';
 
 interface Props {

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import type { ListRow, SharedListRow } from '../_lib/types';
 import Sidebar from './Sidebar';
 import MobileShopperCarousel from './MobileShopperCarousel';
-import styles from '../layout.module.css';
+import styles from '../(shell)/layout.module.css';
 
 interface Props {
   lists: ListRow[];

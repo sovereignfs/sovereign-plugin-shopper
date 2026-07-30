@@ -1,4 +1,4 @@
-import { getCombinedItems } from '../_lib/actions';
+import { getCombinedItems } from '../../_lib/actions';
 import CombinedPane from './CombinedPane';
 
 /**

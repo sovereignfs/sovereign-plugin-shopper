@@ -8,6 +8,13 @@
       "when": 1783873072801,
       "tag": "0000_initial_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785362648383,
+      "tag": "0001_mysterious_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

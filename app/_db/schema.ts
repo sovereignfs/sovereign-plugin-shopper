@@ -92,6 +92,7 @@ export const shopperListItems = sqliteTable('shopper_list_items', {
   checkedAt: integer('checked_at'),
   addedBy: text('added_by').notNull(),
   createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
 });
 
 export const shopperPurchases = sqliteTable('shopper_purchases', {

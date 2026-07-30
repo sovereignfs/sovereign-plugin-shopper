@@ -92,6 +92,7 @@ interface ExportListItem {
   checkedAt: number | null;
   addedBy: string;
   createdAt: number;
+  updatedAt: number;
 }
 
 interface ExportPurchase {
@@ -179,6 +180,7 @@ async function exportShopperData(ctx: ExportContext): Promise<PluginExportSectio
       checkedAt: i.checkedAt,
       addedBy: i.addedBy,
       createdAt: i.createdAt,
+      updatedAt: i.updatedAt,
     }));
   }
 
@@ -315,6 +317,7 @@ async function importShopperData(section: PluginExportSection, ctx: ImportContex
       checkedAt: item.checkedAt,
       addedBy: ctx.userId,
       createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
     });
   }
 

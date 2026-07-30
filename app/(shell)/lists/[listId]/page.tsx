@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getList, getListItemDetail, getListItems, setLastList } from '../../_lib/actions';
+import { getList, getListItemDetail, getListItems, setLastList } from '../../../_lib/actions';
 import ListPane from './ListPane';
 
 interface Props {

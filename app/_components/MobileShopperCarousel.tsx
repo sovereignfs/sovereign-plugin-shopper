@@ -2,8 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import CombinedPane from '../combined/CombinedPane';
-import ListPane from '../lists/[listId]/ListPane';
+import CombinedPane from '../(shell)/combined/CombinedPane';
+import ListPane from '../(shell)/lists/[listId]/ListPane';
 import {
   getCombinedItems,
   getList,

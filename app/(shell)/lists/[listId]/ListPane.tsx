@@ -6,15 +6,15 @@ import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-ki
 import { EmptyState, PageHeader } from '@sovereignfs/ui';
 import { useRouter } from 'next/navigation';
 import { useOptimistic, useTransition } from 'react';
-import { reorderItems } from '../../_lib/actions';
-import { useReorderSensors } from '../../_lib/dndSensors';
-import { groupItemsByCategory } from '../../_lib/group';
-import AddItemBar from '../../_components/AddItemBar';
-import BoughtSection from '../../_components/BoughtSection';
-import ItemEditDialog from '../../_components/ItemEditDialog';
-import ItemRow from '../../_components/ItemRow';
-import ListHeaderActions from '../../_components/ListHeaderActions';
-import type { ListItemDetail, ListItemRow, ListRow } from '../../_lib/types';
+import { reorderItems } from '../../../_lib/actions';
+import { useReorderSensors } from '../../../_lib/dndSensors';
+import { groupItemsByCategory } from '../../../_lib/group';
+import AddItemBar from '../../../_components/AddItemBar';
+import BoughtSection from '../../../_components/BoughtSection';
+import ItemEditDialog from '../../../_components/ItemEditDialog';
+import ItemRow from '../../../_components/ItemRow';
+import ListHeaderActions from '../../../_components/ListHeaderActions';
+import type { ListItemDetail, ListItemRow, ListRow } from '../../../_lib/types';
 import styles from './page.module.css';
 
 interface Props {

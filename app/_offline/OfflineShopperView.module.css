@@ -1,0 +1,111 @@
+.page {
+  padding: var(--sv-space-6);
+}
+
+.syncBar {
+  display: flex;
+  align-items: center;
+  gap: var(--sv-space-3);
+  margin: var(--sv-space-3) 0;
+  padding: var(--sv-space-2) var(--sv-space-3);
+  border-radius: var(--sv-radius-md);
+  background: var(--sv-color-surface-sunken);
+  font-size: var(--sv-font-size-sm);
+  color: var(--sv-color-text-muted);
+}
+
+.syncErrorText {
+  color: var(--sv-color-error-text);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--sv-space-2);
+  overflow-x: auto;
+  margin: var(--sv-space-4) 0;
+}
+
+.tab {
+  flex: 0 0 auto;
+  padding: var(--sv-space-2) var(--sv-space-3);
+  border: 1px solid var(--sv-color-border);
+  border-radius: var(--sv-radius-md);
+  background: var(--sv-color-surface);
+  color: var(--sv-color-text-primary);
+  font-size: var(--sv-font-size-sm);
+  cursor: pointer;
+}
+
+.tabActive {
+  background: var(--sv-color-accent);
+  border-color: var(--sv-color-accent);
+  color: var(--sv-color-text-on-accent);
+}
+
+.addBar {
+  display: flex;
+  gap: var(--sv-space-2);
+  margin: var(--sv-space-4) 0;
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--sv-color-border);
+}
+
+.item {
+  border-bottom: 1px solid var(--sv-color-border);
+}
+
+.trailing {
+  display: flex;
+  align-items: center;
+  gap: var(--sv-space-2);
+}
+
+.quantity {
+  font-size: var(--sv-font-size-sm);
+  color: var(--sv-color-text-subtle);
+  white-space: nowrap;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sv-space-1);
+  border: none;
+  background: transparent;
+  color: var(--sv-color-text-subtle);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  color: var(--sv-color-text-primary);
+}
+
+.boughtHeader {
+  padding: var(--sv-space-3) 0 var(--sv-space-1);
+  font-size: var(--sv-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sv-color-text-subtle);
+}
+
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sv-space-2);
+  padding: var(--sv-space-2) 0;
+}
+
+.editQuantity {
+  max-width: 5rem;
+}
+
+.editUnit {
+  max-width: 6rem;
+}
