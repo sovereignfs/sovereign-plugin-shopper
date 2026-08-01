@@ -23,7 +23,7 @@
     "data:import",
     "offline:write"
   ],
-  "repository": "https://github.com/sovereignfs/sovereign-shopper",
+  "repository": "https://github.com/sovereignfs/sovereign-plugin-shopper",
   "compatibility": {
     "minPlatformVersion": "0.50.1"
   }
