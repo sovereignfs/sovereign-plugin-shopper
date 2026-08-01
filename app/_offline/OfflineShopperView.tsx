@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button, CheckableListRow, EmptyState, Icon, Input, PageHeader } from '@sovereignfs/ui';
 import { offline } from '@sovereignfs/sdk/offline';
 import { drainQueue, offlineQueue, type SyncOutcome } from '@sovereignfs/sdk/offline-queue';
@@ -20,22 +21,51 @@ interface SyncResponse {
   outcomes: SyncOutcome[];
 }
 
+/** Same "last-opened, else first" preference the old server redirect (SHP-03)
+ *  used, shared between the online-redirect path and the offline fallback's
+ *  own tab selection below. */
+function pickTargetListId(snapshot: OfflineSnapshot): string | null {
+  const accessible = [
+    ...snapshot.lists.map((l) => l.id),
+    ...snapshot.sharedLists.map((l) => l.id),
+  ];
+  if (accessible.length === 0) return null;
+  if (snapshot.lastListId && accessible.includes(snapshot.lastListId)) {
+    return snapshot.lastListId;
+  }
+  return accessible[0] ?? null;
+}
+
 /**
- * Offline-capable Shopper home (RFC 0078 — `manifest.json` declares
- * `offline: true` and the `offline:write` permission). `page.tsx` renders
- * the user-neutral shell; all data-fetching, list switching, and mutation
- * happens here, client-side, mirroring Launcher's `LauncherOfflineView`
- * read-through-cache pattern (RFC 0074) extended with `sdk.offline-queue`'s
- * mutation queue for writes.
+ * Shopper home (RFC 0078 — `manifest.json` declares `offline: true` and the
+ * `offline:write` permission). `page.tsx` renders this as a user-neutral
+ * shell so its SSR output stays safe to precache.
  *
- * Deliberately simpler than the online `ListPane` — no drag-reorder,
- * sharing, or list create/rename/archive (out of scope for offline writes,
- * see RFC 0078's locked decisions). List switching is in-memory state, never
- * a real navigation — the only SW-precached, offline-reachable URL is this
- * page's own bare `/shopper`; navigating to `/shopper/lists/[id]` while
- * genuinely offline would fall through to the generic `/offline` fallback.
+ * **While online**, this component's only real job is a client-side redirect
+ * to `/shopper/lists/[id]` (last-opened list, SHP-03) — the full `ListPane`
+ * experience (sidebar, mobile carousel, drag-reorder, sharing, the full item
+ * edit dialog) lives there, unchanged, under the `(shell)` route group. The
+ * redirect happens after mount, never baked into this page's own SSR HTML,
+ * so the neutral-shell/offline-precaching property RFC 0078 needs still
+ * holds.
+ *
+ * **While offline** (or before the live fetch resolves), it falls back to
+ * rendering a deliberately simpler inline view straight from the cached
+ * snapshot + queued mutations — no drag-reorder, sharing, or list
+ * create/rename/archive (out of scope for offline writes, see RFC 0078's
+ * locked decisions). List switching here is in-memory state, never a real
+ * navigation — the only SW-precached, offline-reachable URL is this page's
+ * own bare `/shopper`; navigating to `/shopper/lists/[id]` while genuinely
+ * offline would fall through to the generic `/offline` fallback.
  */
 export function OfflineShopperView() {
+  const router = useRouter();
+  const redirected = useRef(false);
+  // True from the moment the initial online load resolves with a target
+  // list until the redirect actually fires — keeps the loading skeleton up
+  // instead of flashing the simplified inline view for the one tick before
+  // navigation takes over.
+  const [redirecting, setRedirecting] = useState(false);
   const [status, setStatus] = useState<Status>('loading');
   const [view, setView] = useState<OfflineSnapshot | null>(null);
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
@@ -58,7 +88,7 @@ export function OfflineShopperView() {
     setPendingCount(pending.length);
   }, []);
 
-  const loadLive = useCallback(async (): Promise<boolean> => {
+  const loadLive = useCallback(async (): Promise<OfflineSnapshot | null> => {
     try {
       const res = await fetch('/shopper/api/offline-snapshot');
       if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
@@ -66,9 +96,9 @@ export function OfflineShopperView() {
       setStatus('loaded');
       await offline.set(SHOPPER_PLUGIN_ID, SNAPSHOT_KEY, data);
       await rebuildView(data);
-      return true;
+      return data;
     } catch {
-      return false;
+      return null;
     }
   }, [rebuildView]);
 
@@ -123,10 +153,21 @@ export function OfflineShopperView() {
       });
 
     (async () => {
-      const ok = await loadLive();
+      const data = await loadLive();
       if (cancelled) return;
-      if (ok) {
+      if (data) {
+        const target = pickTargetListId(data);
+        if (target) setRedirecting(true);
+        // Drain any queued offline writes before redirecting — the full
+        // ListPane page does its own fresh server fetch with no knowledge
+        // of this page's local mutation queue, so anything still pending
+        // needs to land first or it would look like data loss.
         await sync();
+        if (cancelled || redirected.current) return;
+        if (target) {
+          redirected.current = true;
+          router.replace(`/shopper/lists/${target}`);
+        }
       } else {
         setStatus((s) => (s === 'loading' ? 'unavailable-offline' : s));
       }
@@ -139,7 +180,11 @@ export function OfflineShopperView() {
       cancelled = true;
       window.removeEventListener('online', handleOnline);
     };
-    // Deliberately run once on mount — loadLive/sync are stable via useCallback.
+    // Deliberately run once on mount — loadLive/sync are stable via
+    // useCallback, router is stable per Next's useRouter contract. A later
+    // reconnect (the 'online' listener below) re-syncs but doesn't redirect
+    // — only the initial online mount does, so reconnecting while the user
+    // is actively using the offline fallback doesn't yank them elsewhere.
   }, []);
 
   const accessibleLists = useMemo(() => {
@@ -238,7 +283,7 @@ export function OfflineShopperView() {
     }
   }
 
-  if (status === 'loading') {
+  if (status === 'loading' || redirecting) {
     return (
       <div className={styles.page}>
         <PageHeader title="Shopper" />
