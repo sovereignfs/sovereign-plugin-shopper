@@ -96,7 +96,7 @@ same conclusion as Sovereign Docs. Every surface it needs
 | `adminOnly`                         | omitted (`false`)                                   |
 | `icon`                              | `icon.svg`                                          |
 | `permissions`                       | full intended set — see below                       |
-| `repository`                        | `https://github.com/sovereignfs/sovereign-shopper`     |
+| `repository`                        | `https://github.com/sovereignfs/sovereign-plugin-shopper`     |
 | `compatibility.minPlatformVersion`  | `0.19.0`                                            |
 
 The manifest declares the **full intended permission set** up front,
@@ -136,7 +136,7 @@ reserved ones are added as their milestones land):
   },
   "icon": "icon.svg",
   "permissions": ["auth:session", "db:readWrite", "notifications:send", "data:provide"],
-  "repository": "https://github.com/sovereignfs/sovereign-shopper",
+  "repository": "https://github.com/sovereignfs/sovereign-plugin-shopper",
   "compatibility": {
     "minPlatformVersion": "0.19.0"
   }
