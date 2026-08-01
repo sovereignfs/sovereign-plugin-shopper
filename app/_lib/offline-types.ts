@@ -8,6 +8,10 @@ import type { ListItemRow, ListRow, SharedListRow } from './types';
 export interface OfflineSnapshot {
   lists: ListRow[];
   sharedLists: SharedListRow[];
+  /** The user's last-opened list (SHP-03, `shopper_user_state.last_list_id`),
+   *  or null if never set. The offline shell prefers this over "first list
+   *  by creation date" when picking its initial selection. */
+  lastListId: string | null;
   itemsByListId: Record<string, ListItemRow[]>;
 }
 

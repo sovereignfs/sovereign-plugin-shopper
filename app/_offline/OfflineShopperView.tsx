@@ -152,9 +152,14 @@ export function OfflineShopperView() {
 
   useEffect(() => {
     if (selectedListId || accessibleLists.length === 0) return;
-    const first = accessibleLists[0];
-    if (first) setSelectedListId(first.id);
-  }, [accessibleLists, selectedListId]);
+    // Prefer the last-opened list (SHP-03) over "first by creation date" —
+    // falls back when it's null (never set) or no longer accessible
+    // (archived/unshared since), same fallback the old server redirect had.
+    const lastListId = view?.lastListId ?? null;
+    const last = lastListId ? accessibleLists.find((l) => l.id === lastListId) : undefined;
+    const target = last ?? accessibleLists[0];
+    if (target) setSelectedListId(target.id);
+  }, [accessibleLists, selectedListId, view]);
 
   async function enqueueAndApply(mutation: PendingMutation) {
     if (!view) return;
