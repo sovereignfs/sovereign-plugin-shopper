@@ -2,22 +2,21 @@
   "schemaVersion": 1,
   "id": "fs.sovereign.shopper",
   "name": "Shopper",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "A shared grocery list.",
   "type": "sovereign",
   "runtime": "native",
   "routePrefix": "/shopper",
   "shell": "default",
   "icon": "icon.svg",
-  "offline": true,
+  "offline": "offline-first",
   "permissions": [
     "auth:session",
     "db:readWrite",
     "notifications:send",
     "data:provide",
     "data:export",
-    "data:import",
-    "offline:write"
+    "data:import"
   ],
   "repository": "https://github.com/sovereignfs/sovereign-plugin-shopper",
   "compatibility": {
