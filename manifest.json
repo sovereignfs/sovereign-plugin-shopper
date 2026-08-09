@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "fs.sovereign.shopper",
   "name": "Shopper",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "A shared grocery list.",
   "type": "sovereign",
   "runtime": "native",
@@ -10,8 +10,7 @@
   "shell": "default",
   "icon": "icon.svg",
   "database": {
-    "isolation": "isolated",
-    "dialect": "sqlite"
+    "isolation": "isolated"
   },
   "offline": true,
   "permissions": [
