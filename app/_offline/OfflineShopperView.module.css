@@ -1,7 +1,3 @@
-.page {
-  padding: var(--sv-space-6);
-}
-
 .syncBar {
   display: flex;
   align-items: center;
@@ -46,6 +42,44 @@
   display: flex;
   gap: var(--sv-space-2);
   margin: var(--sv-space-4) 0;
+}
+
+/* The "No lists yet" empty state's create-list form + its own error text —
+   rendered inside EmptyState's `action` slot (a centered flex column, see
+   that component's own .root rule). .createListAction gives both a shared
+   width instead of .addBar's implicit "stretch to the page's full width" —
+   Input defaults to width: 100%, which would otherwise fill whatever width
+   this form shrink-wraps to inside the centered EmptyState column. */
+.createListAction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sv-space-2);
+  width: 100%;
+  max-width: 22rem;
+}
+
+.createListBar {
+  display: flex;
+  width: 100%;
+  gap: var(--sv-space-2);
+}
+
+/* Input defaults to width: 100% (Input.module.css), which — as a flex
+   item's initial main size — made it claim the entire row, leaving the
+   Button almost no space and shrinking it below its own text's natural
+   width, wrapping "Create list" onto two lines. flex: 1 1 auto + min-width:
+   0 makes Input claim only the space Button doesn't need, instead of the
+   other way around. */
+.createListInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* flex-shrink: 0 so Button always keeps its natural content width — it must
+   never be the one absorbing the row's shrinkage, only Input should. */
+.createListSubmit {
+  flex-shrink: 0;
 }
 
 .items {

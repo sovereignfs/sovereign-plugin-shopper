@@ -1,7 +1,13 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  SwipableMobileCarousel,
+  SwipableMobileCarouselSlide,
+  SwipableMobileCarouselSlideBody,
+  useCarouselRouteSync,
+} from '@sovereignfs/ui';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CombinedPane from '../(shell)/combined/CombinedPane';
 import ListPane from '../(shell)/lists/[listId]/ListPane';
 import {
@@ -13,7 +19,6 @@ import {
 } from '../_lib/actions';
 import type { CombinedItemRow, ListItemDetail, ListItemRow, ListRow, SharedListRow } from '../_lib/types';
 import Sidebar from './Sidebar';
-import styles from './MobileShopperCarousel.module.css';
 
 interface ListSlideState {
   list: ListRow | null;
@@ -33,8 +38,11 @@ interface Props {
 }
 
 /** Nav order matches the desktop Sidebar: owned lists first, then shared. */
-function navEntries(lists: ListRow[], sharedLists: SharedListRow[]): { id: string }[] {
-  return [...lists.map((l) => ({ id: l.id })), ...sharedLists.map((l) => ({ id: l.id }))];
+function navEntries(lists: ListRow[], sharedLists: SharedListRow[]): { id: string; name: string }[] {
+  return [
+    ...lists.map((l) => ({ id: l.id, name: l.name })),
+    ...sharedLists.map((l) => ({ id: l.id, name: l.name })),
+  ];
 }
 
 /** Slide 0 is the Lists index; slide n (1<=n<=nav.length) is nav[n-1]; the
@@ -50,18 +58,36 @@ function indexForPathname(pathname: string, nav: { id: string }[]): number {
   return 0;
 }
 
+/** Inverse of indexForPathname — the path to navigate to once a swipe
+ *  settles on a given slide index. Index 0 (the Lists index slide) is the
+ *  one case that deliberately does NOT navigate to its "natural" URL: bare
+ *  `/shopper` always client-redirects to the last-used list on mount
+ *  (`OfflineShopperView`, RFC 0078 — `redirected.current` resets on every
+ *  fresh mount, so this fires every single time, not just once per
+ *  session). Settling there and navigating to `/shopper` would immediately
+ *  bounce back to a list, undoing the swipe/tap before the user ever sees
+ *  the slide settle — a real bug in the pre-migration hand-rolled carousel
+ *  too (`indexForPathname`'s equivalent fallback), just never surfaced.
+ *  Returning `currentPathname` unchanged is a deliberate no-op navigation:
+ *  the slide still renders correctly (driven by `activeIndex`, not the
+ *  URL), it just doesn't try to represent "viewing the Lists index" as its
+ *  own distinct URL, since bare `/shopper` can no longer mean that. */
+function pathForIndex(
+  index: number,
+  nav: { id: string }[],
+  hasCombined: boolean,
+  currentPathname: string,
+): string {
+  if (index >= 1 && index <= nav.length) return `/shopper/lists/${nav[index - 1]?.id}`;
+  if (hasCombined && index === nav.length + 1) return '/shopper/combined';
+  return currentPathname;
+}
+
 export default function MobileShopperCarousel({ lists, sharedLists, refreshSignal }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRefreshSignal = useRef(true);
-  // Set right before the scroll-settle handler's own router.replace, so the
-  // pathname-sync effect can tell that specific navigation apart from a
-  // genuinely external one (tapping a Sidebar <Link>, browser back/forward)
-  // — see MobileTasksCarousel's identical flag for the full rationale.
-  const isInternalNav = useRef(false);
 
   // Memoized so activeNavEntry (derived below) keeps a stable reference
   // across re-renders that don't actually change the list set — otherwise
@@ -72,12 +98,18 @@ export default function MobileShopperCarousel({ lists, sharedLists, refreshSigna
   const hasCombined = nav.length >= 2;
   const combinedIndex = nav.length + 1;
 
-  const [activeIndex, setActiveIndex] = useState(() => indexForPathname(pathname, nav));
-  const initialIndexRef = useRef(activeIndex);
-  const activeIndexRef = useRef(activeIndex);
-  useEffect(() => {
-    activeIndexRef.current = activeIndex;
-  }, [activeIndex]);
+  // Centralizes the pathname↔slide-index mapping and the "was this pathname
+  // change our own settle, or an external navigation" distinction that used
+  // to be hand-rolled here — see useCarouselRouteSync's own doc comment.
+  // indexForPathname/pathForIndex read `nav`/`hasCombined`/`pathname` via
+  // closure; identity doesn't matter since the hook stores them in refs and
+  // reads the latest one on every settle.
+  const { activeIndex, onSettle } = useCarouselRouteSync({
+    indexForPathname: (path) => indexForPathname(path, nav),
+    pathForIndex: (index) => pathForIndex(index, nav, hasCombined, pathname),
+    pathname,
+    onNavigate: (path) => router.replace(path, { scroll: false }),
+  });
 
   const [listState, setListState] = useState<Record<string, ListSlideState>>({});
   const [combinedItems, setCombinedItems] = useState<CombinedItemRow[] | null>(null);
@@ -149,82 +181,15 @@ export default function MobileShopperCarousel({ lists, sharedLists, refreshSigna
     if (activeNavEntry) setLastList(activeNavEntry.id).catch(() => {});
   }, [activeNavEntry]);
 
-  // Initial scroll position, once — subsequent activeIndex changes come from
-  // the user's own scroll gesture and must not be fought with a re-snap.
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ left: initialIndexRef.current * el.clientWidth, behavior: 'instant' });
-  }, []);
-
-  // Sync to the pathname whenever it changes for a reason other than this
-  // carousel's own scroll-settle handler below — e.g. tapping a list row's
-  // <Link> on the Lists index slide (Sidebar), which navigates but never
-  // touches scrollLeft itself.
-  const didMountPathSync = useRef(false);
-  useEffect(() => {
-    if (!didMountPathSync.current) {
-      didMountPathSync.current = true;
-      return;
-    }
-    if (isInternalNav.current) {
-      isInternalNav.current = false;
-      return;
-    }
-    const newIndex = indexForPathname(pathname, nav);
-    if (newIndex === activeIndexRef.current) return;
-    setActiveIndex(newIndex);
-    scrollRef.current?.scrollTo({ left: newIndex * scrollRef.current.clientWidth, behavior: 'smooth' });
-  }, [pathname, nav]);
-
-  // Re-align on viewport resize (e.g. orientation change) so the active
-  // slide stays framed correctly.
-  useEffect(() => {
-    function handleResize() {
-      const el = scrollRef.current;
-      if (!el) return;
-      el.scrollTo({ left: activeIndex * el.clientWidth, behavior: 'instant' });
-    }
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [activeIndex]);
-
-  // Debounced "settled" detection — avoids depending on the newer `scrollend`
-  // event, which pre-17.4 iOS Safari/WKWebView doesn't support.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    function handleScroll() {
-      if (scrollTimer.current) clearTimeout(scrollTimer.current);
-      scrollTimer.current = setTimeout(() => {
-        const current = scrollRef.current;
-        if (!current) return;
-        const width = current.clientWidth;
-        if (!width) return;
-        const newIndex = Math.round(current.scrollLeft / width);
-        if (newIndex === activeIndexRef.current) return;
-        setActiveIndex(newIndex);
-        isInternalNav.current = true;
-        if (newIndex >= 1 && newIndex <= nav.length) {
-          router.replace(`/shopper/lists/${nav[newIndex - 1]?.id}`, { scroll: false });
-        } else if (hasCombined && newIndex === combinedIndex) {
-          router.replace('/shopper/combined', { scroll: false });
-        } else {
-          router.replace('/shopper', { scroll: false });
-        }
-      }, 120);
-    }
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      el.removeEventListener('scroll', handleScroll);
-      if (scrollTimer.current) clearTimeout(scrollTimer.current);
-    };
-  }, [nav, hasCombined, combinedIndex, router]);
-
   // Item-edit dialog: driven by the ?item= param on the active list slide,
   // same convention as desktop. Unlike Tasks' detail pane, ItemEditDialog is
   // already a self-adapting Dialog (auto-fullscreen on mobile) rendered
-  // inline by ListPane — no separate Sheet wrapper needed here.
+  // inline by ListPane — no separate Sheet wrapper needed here. Kept as an
+  // inline part of the routed slide's own tree (not a sibling of
+  // SwipableMobileCarousel) — Dialog already portals itself, so it isn't
+  // subject to the carousel's mount-window, and this is the pattern
+  // SwipableMobileCarousel's own doc comment calls out as the reason this
+  // carousel doesn't need Tasks' Sheet-wrapping detour.
   useEffect(() => {
     if (!itemIdParam || !activeNavEntry) {
       setEditingItem(null);
@@ -244,51 +209,38 @@ export default function MobileShopperCarousel({ lists, sharedLists, refreshSigna
   }, [itemIdParam, activeNavEntry, refreshSignal]);
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.scroller} ref={scrollRef}>
-        <div className={styles.slide}>
+    <SwipableMobileCarousel activeIndex={activeIndex} onSettle={onSettle} aria-label="Shopper lists">
+      <SwipableMobileCarouselSlide slideKey="index" label="Lists">
+        <SwipableMobileCarouselSlideBody>
           <Sidebar lists={lists} sharedLists={sharedLists} />
-        </div>
+        </SwipableMobileCarouselSlideBody>
+      </SwipableMobileCarouselSlide>
 
-        {nav.map((entry) => {
-          const state = listState[entry.id];
-          return (
-            <div className={styles.slide} key={entry.id}>
-              {state && state.status === 'loaded' && state.list ? (
+      {nav.map((entry) => {
+        const state = listState[entry.id];
+        return (
+          <SwipableMobileCarouselSlide key={entry.id} slideKey={entry.id} label={entry.name}>
+            <SwipableMobileCarouselSlideBody loading={!state || !state.list}>
+              {state?.list && (
                 <ListPane
                   listId={entry.id}
                   list={state.list}
                   items={state.items}
                   editingItem={activeNavEntry?.id === entry.id ? editingItem : null}
                 />
-              ) : (
-                <div className={styles.slideLoading}>Loading…</div>
               )}
-            </div>
-          );
-        })}
+            </SwipableMobileCarouselSlideBody>
+          </SwipableMobileCarouselSlide>
+        );
+      })}
 
-        {hasCombined && (
-          <div className={styles.slide}>
-            {combinedItems !== null ? (
-              <CombinedPane items={combinedItems} />
-            ) : (
-              <div className={styles.slideLoading}>Loading…</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {(nav.length > 0 || hasCombined) && (
-        <div className={styles.dots} aria-hidden>
-          {['index', ...nav.map((n) => n.id), ...(hasCombined ? ['combined'] : [])].map((key, i) => (
-            <span
-              key={key}
-              className={[styles.dot, i === activeIndex ? styles.dotActive : ''].join(' ')}
-            />
-          ))}
-        </div>
+      {hasCombined && (
+        <SwipableMobileCarouselSlide slideKey="combined" label="Combined view">
+          <SwipableMobileCarouselSlideBody loading={combinedItems === null}>
+            {combinedItems !== null && <CombinedPane items={combinedItems} />}
+          </SwipableMobileCarouselSlideBody>
+        </SwipableMobileCarouselSlide>
       )}
-    </div>
+    </SwipableMobileCarousel>
   );
 }
