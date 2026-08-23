@@ -1,27 +1,7 @@
-.shell {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  min-height: 100%;
-}
-
-/* Mobile carousel wrapper — deliberately NOT `.shell`: that class's
-   grid-template-columns is desktop-only (280px sidebar + content). Reusing
-   it here squeezed MobileShopperCarousel into the 280px first column track
-   instead of spanning the full viewport, which in turn squeezed every row's
-   available width enough to visibly truncate item names and overlap the
-   list header's title with its action buttons. */
+/* Mobile carousel wrapper. Desktop's own two-pane layout now comes entirely
+   from @sovereignfs/ui's ThreeColumnLayout (see MobileAwareShell.tsx) — no
+   equivalent class needed here anymore. */
 .mobileShell {
   height: 100%;
   width: 100%;
-}
-
-.sidebar {
-  border-right: 1px solid var(--sv-color-border);
-  background: var(--sv-color-surface-raised);
-  overflow-y: auto;
-}
-
-.content {
-  min-width: 0;
-  overflow-y: auto;
 }

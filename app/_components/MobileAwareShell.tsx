@@ -1,6 +1,6 @@
 'use client';
 
-import { useIsMobile } from '@sovereignfs/ui';
+import { ThreeColumnLayout, useIsMobile } from '@sovereignfs/ui';
 import type { ReactNode } from 'react';
 import type { ListRow, SharedListRow } from '../_lib/types';
 import Sidebar from './Sidebar';
@@ -14,13 +14,23 @@ interface Props {
 }
 
 /**
- * Forks the plugin's root shell between the desktop two-pane layout
- * (unchanged) and the mobile swipeable-lists carousel — same split as
- * sovereign-tasks' `MobileAwareShell`. Uses the platform's default 768px
- * breakpoint (`@sovereignfs/ui`'s `useIsMobile()`), not a plugin-local
- * override: Tasks' narrower 640px was specifically to avoid squeezing its
- * three-column desktop layout at tablet widths, which doesn't apply to
- * Shopper's simpler two-pane sidebar+content layout.
+ * Forks the plugin's root shell between the desktop two-pane layout and the
+ * mobile swipeable-lists carousel — same split as sovereign-tasks'
+ * `MobileAwareShell`. Uses the platform's default 768px breakpoint
+ * (`@sovereignfs/ui`'s `useIsMobile()`), not a plugin-local override: Tasks'
+ * narrower 640px was specifically to avoid squeezing its three-column
+ * desktop layout at tablet widths, which doesn't apply to Shopper's simpler
+ * two-pane sidebar+content layout.
+ *
+ * Desktop composes `@sovereignfs/ui`'s `ThreeColumnLayout` in its 2-child
+ * (sidebar + main, no detail column) mode instead of a hand-rolled CSS grid
+ * — matching how sovereign-tasks' own `DesktopTasksShell` adopted it.
+ * `ThreeColumnLayout`'s own `.sidebar`/`.main` wrappers already apply this
+ * plugin's exact previous styling token-for-token
+ * (`--sv-color-surface-raised` + a right `--sv-color-border` on the sidebar,
+ * `--sv-color-surface` on main, both `overflow-y: auto`), so no custom
+ * className or wrapper div is needed to preserve the existing look — unlike
+ * Tasks, which needed its own recessed-flank background override.
  *
  * On mobile, `children` (page.tsx's server-rendered output for the current
  * route) is deliberately not rendered — `MobileShopperCarousel` fetches its
@@ -42,11 +52,9 @@ export default function MobileAwareShell({ lists, sharedLists, children }: Props
   }
 
   return (
-    <div className={styles.shell}>
-      <div className={styles.sidebar}>
-        <Sidebar lists={lists} sharedLists={sharedLists} />
-      </div>
-      <main className={styles.content}>{children}</main>
-    </div>
+    <ThreeColumnLayout sidebarWidth={280}>
+      <Sidebar lists={lists} sharedLists={sharedLists} />
+      <main>{children}</main>
+    </ThreeColumnLayout>
   );
 }

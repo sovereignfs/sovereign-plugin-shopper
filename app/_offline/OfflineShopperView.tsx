@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, CheckableListRow, EmptyState, Icon, Input, PageHeader } from '@sovereignfs/ui';
+import {
+  Button,
+  CheckableListRow,
+  EmptyState,
+  Icon,
+  Input,
+  PageContainer,
+  PageHeader,
+} from '@sovereignfs/ui';
 import { offline } from '@sovereignfs/sdk/offline';
 import { drainQueue, offlineQueue, type SyncOutcome } from '@sovereignfs/sdk/offline-queue';
 import { createList } from '../_lib/actions';
@@ -267,71 +275,92 @@ export function OfflineShopperView() {
   // item-level operations only) — `createList` is the same server action
   // the online sidebar's `CreateListForm` calls; here it's invoked directly
   // from client code, which works for any 'use server' action, online only.
+  //
+  // Navigates straight to the new list's real route (same `router.replace`
+  // this component already uses for the SHP-03 redirect above) instead of
+  // calling `loadLive()` and staying on this neutral/offline shell — that
+  // used to be the only path, which left the user looking at this page's
+  // own simplified inline list/items UI (no sidebar, no drag-reorder, no
+  // sharing) with no way to reach the real ThreeColumnLayout shell short of
+  // a full page reload (which re-runs the mount effect's own redirect logic
+  // from scratch and finds a real target this time). This page's whole job
+  // is to redirect once a target list exists — creating the first list
+  // makes one exist immediately, so it should redirect immediately too,
+  // not wait for a future mount.
   async function handleCreateList() {
     const trimmed = newListName.trim();
     if (!trimmed) return;
     setCreatingList(true);
     setCreateListError(null);
     try {
-      await createList(trimmed);
+      const id = await createList(trimmed);
       setNewListName('');
-      await loadLive();
+      router.replace(`/shopper/lists/${id}`);
     } catch {
       setCreateListError('Could not create the list — check your connection and try again.');
-    } finally {
       setCreatingList(false);
     }
   }
 
   if (status === 'loading' || redirecting) {
     return (
-      <div className={styles.page}>
+      <PageContainer>
         <PageHeader title="Shopper" />
-      </div>
+      </PageContainer>
     );
   }
 
   if (status === 'unavailable-offline' || !view) {
     return (
-      <div className={styles.page}>
+      <PageContainer>
         <PageHeader title="Shopper" />
         <EmptyState
           icon="alert-triangle"
           heading="Not available offline yet"
           description="Open Shopper once online to make your lists available with no connection."
         />
-      </div>
+      </PageContainer>
     );
   }
 
   if (accessibleLists.length === 0) {
     return (
-      <div className={styles.page}>
+      <PageContainer>
         <PageHeader title="Shopper" />
         <EmptyState
           heading="No lists yet"
           description="Create a list to get started — this needs a connection."
+          action={
+            <div className={styles.createListAction}>
+              <form
+                className={styles.createListBar}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void handleCreateList();
+                }}
+              >
+                <Input
+                  className={styles.createListInput}
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  placeholder="List name…"
+                  aria-label="New list name"
+                  disabled={creatingList}
+                />
+                <Button
+                  className={styles.createListSubmit}
+                  type="submit"
+                  size="sm"
+                  disabled={creatingList}
+                >
+                  {creatingList ? 'Creating…' : 'Create list'}
+                </Button>
+              </form>
+              {createListError && <p className={styles.syncErrorText}>{createListError}</p>}
+            </div>
+          }
         />
-        <form
-          className={styles.addBar}
-          onSubmit={(e) => {
-            e.preventDefault();
-            void handleCreateList();
-          }}
-        >
-          <Input
-            value={newListName}
-            onChange={(e) => setNewListName(e.target.value)}
-            placeholder="List name…"
-            aria-label="New list name"
-            disabled={creatingList}
-          />
-          <Button type="submit" size="sm" disabled={creatingList}>
-            {creatingList ? 'Creating…' : 'Create list'}
-          </Button>
-        </form>
-        {createListError && <p className={styles.syncErrorText}>{createListError}</p>}
-      </div>
+      </PageContainer>
     );
   }
 
@@ -341,7 +370,7 @@ export function OfflineShopperView() {
   const boughtItems = items.filter((i) => i.checkedAt !== null);
 
   return (
-    <div className={styles.page}>
+    <PageContainer>
       <PageHeader title="Shopper" />
 
       {pendingCount > 0 && (
@@ -504,6 +533,6 @@ export function OfflineShopperView() {
           )}
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }
