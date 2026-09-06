@@ -1,9 +1,10 @@
 {
   "extends": "@sovereignfs/tsconfig/nextjs.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
@@ -15,5 +16,7 @@
     "lib/**/*.ts",
     "db/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }
