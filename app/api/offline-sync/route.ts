@@ -19,11 +19,13 @@ import type {
  * half of the idempotent, absolute-state apply contract `sdk.offline-queue`
  * documents. A plain Route Handler (client `fetch()`-able, unlike a Server
  * Action), gated by the platform's ordinary session middleware exactly like
- * a page. `offline:write` (declared in manifest.json) is review/install-time
- * signal only — the real authorization boundary here is the same session +
- * role check every other mutating action in this file already performs;
- * see RFC 0078 §6 for why a manifest permission can't be host-enforced the
- * way `mailer:send` is for a plugin's own Route Handler.
+ * a page. There is no manifest permission behind this: an early `offline:write`
+ * was dropped from the manifest schema (it now fails validation as unknown),
+ * and `offline: "offline-first"` is a capability declaration, not a grant.
+ * The real authorization boundary is the same session + role check every
+ * other mutating action in this file already performs — see RFC 0078 §6 for
+ * why a manifest permission couldn't be host-enforced here the way
+ * `mailer:send` is for a plugin's own Route Handler anyway.
  *
  * Applies **sequentially, halting at the first `failed` result** — a
  * mutation later in the batch that depends on an earlier one (e.g. editing

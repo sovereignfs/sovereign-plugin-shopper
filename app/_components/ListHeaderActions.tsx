@@ -1,6 +1,14 @@
 'use client';
 
-import { Button, ConfirmDialog, Icon, Menu, type MenuEntry, useIsMobile } from '@sovereignfs/ui';
+import {
+  Button,
+  ConfirmDialog,
+  Icon,
+  Menu,
+  type MenuEntry,
+  useCommitOnEnterOrBlur,
+  useIsMobile,
+} from '@sovereignfs/ui';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { archiveList, renameList } from '../_lib/actions';
@@ -20,6 +28,7 @@ export default function ListHeaderActions({ list }: Props) {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,23 +36,42 @@ export default function ListHeaderActions({ list }: Props) {
     if (renaming) renameInputRef.current?.focus();
   }, [renaming]);
 
+  /** Closes the field on every attempt and reports a rejection (a duplicate
+   *  name, say) beside the header — see Sidebar's identical commit for why
+   *  the field can't stay open on failure. */
   function commitRename() {
     const trimmed = name.trim();
     setRenaming(false);
-    if (trimmed && trimmed !== list.name) {
-      startTransition(async () => {
+    if (!trimmed || trimmed === list.name) {
+      setName(list.name);
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
         await renameList(list.id, trimmed);
         router.refresh();
-      });
-    }
+      } catch (err) {
+        setName(list.name);
+        setError(err instanceof Error ? err.message : 'Could not rename this list.');
+      }
+    });
   }
 
+  const renameHandlers = useCommitOnEnterOrBlur(commitRename);
+
   function confirmArchive() {
+    setError(null);
     startTransition(async () => {
-      await archiveList(list.id);
-      setArchiveOpen(false);
-      router.push('/shopper');
-      router.refresh();
+      try {
+        await archiveList(list.id);
+        setArchiveOpen(false);
+        router.push('/shopper');
+        router.refresh();
+      } catch (err) {
+        setArchiveOpen(false);
+        setError(err instanceof Error ? err.message : 'Could not archive this list.');
+      }
     });
   }
 
@@ -54,9 +82,9 @@ export default function ListHeaderActions({ list }: Props) {
         className={styles.renameInput}
         value={name}
         onChange={(e) => setName(e.target.value)}
-        onBlur={commitRename}
+        onBlur={renameHandlers.onBlur}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') commitRename();
+          renameHandlers.onKeyDown(e);
           if (e.key === 'Escape') {
             setName(list.name);
             setRenaming(false);
@@ -77,11 +105,18 @@ export default function ListHeaderActions({ list }: Props) {
   const menuItems: MenuEntry[] = [
     { label: 'Share', icon: 'user', onSelect: () => setShareOpen(true) },
     { label: 'Rename', icon: 'pencil', onSelect: () => setRenaming(true) },
-    { label: 'Archive', icon: 'trash-2', destructive: true, onSelect: () => setArchiveOpen(true) },
+    // Destructive styling (it can't be undone from the UI) but an archive
+    // icon, not a trash can — archiving keeps every item in the database.
+    { label: 'Archive', icon: 'inbox', destructive: true, onSelect: () => setArchiveOpen(true) },
   ];
 
   return (
     <div className={styles.actions}>
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
       {isMobile ? (
         <Menu
           open={menuOpen}

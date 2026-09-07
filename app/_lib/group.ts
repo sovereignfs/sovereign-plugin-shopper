@@ -1,8 +1,14 @@
 import type { ListItemRow } from './types';
 
-export interface CategoryGroup {
+/** Anything groupable by category — a list item (`ListItemRow`) or a combined
+ *  roll-up row (`CombinedItemRow`), which carries no `sort_order` of its own. */
+interface Categorized {
+  category: string | null;
+}
+
+export interface CategoryGroup<T extends Categorized = ListItemRow> {
   category: string;
-  items: ListItemRow[];
+  items: T[];
 }
 
 const UNCATEGORIZED = 'Uncategorized';
@@ -12,9 +18,14 @@ const UNCATEGORIZED = 'Uncategorized';
  *  by their first item's `sort_order` (so the group layout doesn't jump
  *  around as items are added). Items with no category land in a trailing
  *  "Uncategorized" group. Pure — takes the already sort_order-sorted list
- *  from getListItems(), doesn't hit the DB itself. */
-export function groupItemsByCategory(items: ListItemRow[]): CategoryGroup[] {
-  const groups = new Map<string, ListItemRow[]>();
+ *  from getListItems(), doesn't hit the DB itself.
+ *
+ *  Generic over the row type so the combined view (SHP-02) groups by the
+ *  same rules rather than re-deriving them: it used to build its own Map
+ *  inline and lost the Uncategorized-last rule, so the two views ordered
+ *  their sections differently. */
+export function groupItemsByCategory<T extends Categorized>(items: T[]): CategoryGroup<T>[] {
+  const groups = new Map<string, T[]>();
   for (const item of items) {
     const key = item.category ?? UNCATEGORIZED;
     const bucket = groups.get(key);

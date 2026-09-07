@@ -4,6 +4,25 @@
   font-size: var(--sv-font-size-sm);
 }
 
+.addRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sv-space-2);
+}
+
+/* The suggestion list anchors to this wrapper, so it has to be the sized
+   element rather than the flex child growing around it. */
+.addSearch {
+  flex: 1;
+  min-width: 0;
+}
+
+.error {
+  margin: var(--sv-space-2) 0 0;
+  font-size: var(--sv-font-size-sm);
+  color: var(--sv-color-error-text);
+}
+
 .divider {
   margin: var(--sv-space-4) 0;
   border-top: 1px solid var(--sv-color-border);

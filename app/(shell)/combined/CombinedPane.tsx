@@ -1,6 +1,7 @@
 'use client';
 
 import { EmptyState, Icon, PageHeader } from '@sovereignfs/ui';
+import { groupItemsByCategory } from '../../_lib/group';
 import { resolveIcon } from '../../_lib/icons';
 import type { CombinedItemRow } from '../../_lib/types';
 import styles from './page.module.css';
@@ -12,16 +13,12 @@ interface Props {
 /**
  * Combined-view render, shared by the desktop route (`page.tsx`,
  * server-fetched) and `MobileShopperCarousel` (client-fetched, its trailing
- * slide) — same split as `ListPane`.
+ * slide) — same split as `ListPane`. Grouping goes through the same
+ * `groupItemsByCategory` the list view uses (Uncategorized last), rather
+ * than a second inline Map that ordered its sections differently.
  */
 export default function CombinedPane({ items }: Props) {
-  const grouped = new Map<string, CombinedItemRow[]>();
-  for (const item of items) {
-    const key = item.category ?? 'Uncategorized';
-    const bucket = grouped.get(key) ?? [];
-    bucket.push(item);
-    grouped.set(key, bucket);
-  }
+  const groups = groupItemsByCategory(items);
 
   return (
     <div className={styles.page}>
@@ -33,16 +30,16 @@ export default function CombinedPane({ items }: Props) {
 
       {items.length === 0 ? (
         <EmptyState
-          heading="No items yet"
-          description="Items you add to your lists will show up here once you start adding them."
+          heading="Nothing left to buy"
+          description="Items from all your lists show up here until someone marks them bought."
         />
       ) : (
         <div className={styles.groups}>
-          {[...grouped.entries()].map(([category, categoryItems]) => (
-            <section key={category} className={styles.group}>
-              <h2 className={styles.groupLabel}>{category}</h2>
+          {groups.map((group) => (
+            <section key={group.category} className={styles.group}>
+              <h2 className={styles.groupLabel}>{group.category}</h2>
               <ul className={styles.itemList}>
-                {categoryItems.map((item) => (
+                {group.items.map((item) => (
                   <li key={item.id} className={styles.item}>
                     <span className={styles.itemIcon}>
                       <Icon name={resolveIcon(item.icon, item.category)} size="md" aria-hidden />

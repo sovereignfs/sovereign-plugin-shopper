@@ -1,5 +1,8 @@
 import { getTableName, type Table } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+// The condition walker this sweep depends on is shared with the combined-view
+// query-shape test — see its doc comment for why it must skip `.table`.
+import { referencedColumnNames } from './condition-utils';
 
 vi.mock('@sovereignfs/sdk', () => ({
   sdk: {
@@ -8,34 +11,6 @@ vi.mock('@sovereignfs/sdk', () => ({
     directory: { searchUsers: vi.fn(async () => []), resolveUsers: vi.fn(async () => []) },
   },
 }));
-
-/**
- * Walks a drizzle SQL condition object (the return value of `and()`/`eq()`)
- * and collects the names of every column referenced directly in it. Column
- * objects carry a circular `table` back-reference that in turn holds every
- * *other* column on that table — walking into it would make this detector
- * report a column as "referenced" just because a sibling column from the
- * same table happened to appear elsewhere in the condition, which would
- * silently defeat the check. Skipping the `table` key avoids that false
- * positive while still finding any column the condition actually names.
- */
-function referencedColumnNames(node: unknown, seen = new Set<unknown>()): Set<string> {
-  const names = new Set<string>();
-  function walk(value: unknown) {
-    if (!value || typeof value !== 'object' || seen.has(value)) return;
-    seen.add(value);
-    const obj = value as Record<string, unknown>;
-    if (typeof obj.name === 'string' && typeof obj.columnType === 'string') {
-      names.add(obj.name);
-    }
-    for (const key of Object.keys(obj)) {
-      if (key === 'table') continue;
-      walk(obj[key]);
-    }
-  }
-  walk(node);
-  return names;
-}
 
 function expectTenantScoped(condition: unknown) {
   expect(referencedColumnNames(condition)).toContain('tenant_id');

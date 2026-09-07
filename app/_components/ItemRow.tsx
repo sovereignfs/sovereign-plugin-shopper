@@ -2,14 +2,13 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CheckableListRow, Icon } from '@sovereignfs/ui';
+import { CheckableListRow, GripIcon, Icon } from '@sovereignfs/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { toggleItemBought } from '../_lib/actions';
 import { resolveIcon } from '../_lib/icons';
 import type { ListItemRow } from '../_lib/types';
-import GripIcon from './GripIcon';
 import styles from './ItemRow.module.css';
 
 interface Props {
@@ -64,7 +63,7 @@ export default function ItemRow({ listId, item, canEdit }: Props) {
           {...attributes}
           {...listeners}
         >
-          <GripIcon />
+          <GripIcon size={12} />
         </button>
       )}
       <CheckableListRow

@@ -35,6 +35,7 @@ export default function CreateListForm({
   const [openState, setOpenState] = useState(variant === 'inline');
   const open = isControlled ? openProp : openState;
   const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -51,12 +52,19 @@ export default function CreateListForm({
     e?.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
+    setError(null);
     startTransition(async () => {
-      const id = await createList(trimmed);
-      setName('');
-      setOpen(false);
-      router.push(`/shopper/lists/${id}`);
-      router.refresh();
+      try {
+        const id = await createList(trimmed);
+        setName('');
+        setOpen(false);
+        router.push(`/shopper/lists/${id}`);
+        router.refresh();
+      } catch (err) {
+        // Stays open with the typed name intact — the usual reason to land
+        // here is a name already in use, which the user can just amend.
+        setError(err instanceof Error ? err.message : 'Could not create this list.');
+      }
     });
   }
 
@@ -84,11 +92,15 @@ export default function CreateListForm({
         ref={inputRef}
         className={styles.input}
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => {
+          setName(e.target.value);
+          setError(null);
+        }}
         onKeyDown={(e) => {
           commitHandlers.onKeyDown(e);
           if (e.key === 'Escape') {
             setName('');
+            setError(null);
             setOpen(false);
           }
         }}
@@ -100,6 +112,11 @@ export default function CreateListForm({
         aria-label="List name"
         disabled={pending}
       />
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
     </form>
   );
 }

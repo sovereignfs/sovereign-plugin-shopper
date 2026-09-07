@@ -1,6 +1,6 @@
 'use client';
 
-import { Avatar, Button, Dialog, Select, SuggestionInput } from '@sovereignfs/ui';
+import { Avatar, Button, Dialog, Icon, Select, SuggestionInput } from '@sovereignfs/ui';
 import { useEffect, useState, useTransition } from 'react';
 import { getListShares, revokeShare, searchDirectoryUsers, shareList } from '../_lib/actions';
 import type { DirectoryUserRow, ListShareRow } from '../_lib/types';
@@ -19,12 +19,18 @@ const DEBOUNCE_MS = 200;
  *  create row — picking an existing directory user, not typing free text),
  *  then a "People with access" list with a role Select and a remove button
  *  per share. Owner-only; sharing/role changes/revokes all refresh the
- *  share list from the server rather than assuming the optimistic result. */
+ *  share list from the server rather than assuming the optimistic result.
+ *
+ *  The access level is chosen *before* picking a person — sharing used to
+ *  always grant "Can view" and leave changing it to a second trip through
+ *  the row's own Select, which made granting edit access a two-step job. */
 export default function ShareDialog({ listId, listName, open, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<DirectoryUserRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [shares, setShares] = useState<ListShareRow[]>([]);
+  const [newRole, setNewRole] = useState<'editor' | 'viewer'>('viewer');
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -51,27 +57,33 @@ export default function ShareDialog({ listId, listName, open, onClose }: Props) 
     getListShares(listId).then(setShares);
   }
 
+  /** Every mutation here goes through the same run-and-report path: a failure
+   *  (the list was archived or unshared in another tab, say) surfaces in the
+   *  dialog instead of rejecting into nothing. */
+  function run(action: () => Promise<void>, fallbackMessage: string) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await action();
+        refreshShares();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : fallbackMessage);
+      }
+    });
+  }
+
   function handleAdd(userId: string) {
     setQuery('');
     setResults([]);
-    startTransition(async () => {
-      await shareList(listId, userId, 'viewer');
-      refreshShares();
-    });
+    run(() => shareList(listId, userId, newRole), 'Could not share this list.');
   }
 
   function handleRoleChange(userId: string, role: 'editor' | 'viewer') {
-    startTransition(async () => {
-      await shareList(listId, userId, role);
-      refreshShares();
-    });
+    run(() => shareList(listId, userId, role), 'Could not change access.');
   }
 
   function handleRemove(userId: string) {
-    startTransition(async () => {
-      await revokeShare(listId, userId);
-      refreshShares();
-    });
+    run(() => revokeShare(listId, userId), 'Could not remove access.');
   }
 
   const sharedIds = new Set(shares.map((s) => s.userId));
@@ -83,16 +95,36 @@ export default function ShareDialog({ listId, listName, open, onClose }: Props) 
     <Dialog open={open} onClose={onClose} size="md" title="Share list" aria-label="Share list">
       <p className={styles.subtitle}>{listName}</p>
 
-      <SuggestionInput
-        value={query}
-        onChange={setQuery}
-        options={searchOptions}
-        onSelect={(option) => handleAdd(option.id)}
-        placeholder="Search people by name or email…"
-        aria-label="Search people"
-        loading={searching}
-        disabled={pending}
-      />
+      <div className={styles.addRow}>
+        <div className={styles.addSearch}>
+          <SuggestionInput
+            value={query}
+            onChange={setQuery}
+            options={searchOptions}
+            onSelect={(option) => handleAdd(option.id)}
+            placeholder="Search people by name or email…"
+            aria-label="Search people"
+            loading={searching}
+            disabled={pending}
+          />
+        </div>
+        <Select
+          size="sm"
+          value={newRole}
+          onChange={(e) => setNewRole(e.target.value as 'editor' | 'viewer')}
+          disabled={pending}
+          aria-label="Access for people you add"
+        >
+          <option value="viewer">Can view</option>
+          <option value="editor">Can edit</option>
+        </Select>
+      </div>
+
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
 
       <div className={styles.divider} />
       <h3 className={styles.sectionLabel}>People with access</h3>
@@ -128,7 +160,7 @@ export default function ShareDialog({ listId, listName, open, onClose }: Props) 
               disabled={pending}
               aria-label={`Remove ${share.name}`}
             >
-              ✕
+              <Icon name="x" size="sm" aria-hidden />
             </button>
           </li>
         ))}

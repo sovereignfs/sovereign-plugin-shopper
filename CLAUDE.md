@@ -145,8 +145,10 @@ data without a plan risks a destructive migration.
   original chevron-button version (T-09) didn't work reliably in practice
   and was replaced with `dnd-kit` (`@dnd-kit/core`, `@dnd-kit/sortable`,
   `@dnd-kit/utilities`), matching `sovereign-tasks`' identical drag-reorder
-  pattern (`dndSensors.ts`'s `useReorderSensors`, `GripIcon.tsx` — both
-  copied verbatim from that plugin, neither is `@sovereignfs/ui`-exported).
+  pattern (`dndSensors.ts`'s `useReorderSensors`, copied verbatim from that
+  plugin and not `@sovereignfs/ui`-exported; the drag handle itself is
+  `@sovereignfs/ui`'s exported `GripIcon`, which replaced this plugin's own
+  copy of it once the DS started exporting one).
   **Each category group mounts its own independent `DndContext`** (unique
   `id` prop per group, e.g. `` `shopper-items-${category}` ``) wrapping a
   `SortableContext` scoped to just that group's item ids — items still can't
@@ -301,7 +303,8 @@ This plugin follows its own semver, independent of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.3.3**
+Current version: **0.5.0** (`manifest.json` is the source of truth — this line
+has drifted before; check it there first)
 
 ## Running locally
 

@@ -90,14 +90,20 @@ describe('reorderItems — slot-preserving reassignment', () => {
     expect(updateCalls.map((c) => c.sortOrder)).toEqual([0, 1, 2]);
   });
 
-  it('no-ops without writing anything when an id is stale (not on this list)', async () => {
+  it('throws without writing anything when an id is stale (not on this list)', async () => {
     // The query only ever resolves rows the DB actually has — item-x isn't
     // one of them, so the fake's "query result" (itemRows) has fewer rows
     // than orderedIds, exactly like a real inArray() lookup would.
+    //
+    // It throws rather than returning quietly: the caller has already applied
+    // the drag optimistically, and a silent return was indistinguishable from
+    // success — the order snapped back on the next refresh with nothing said.
     itemRows = [{ id: 'item-a', sortOrder: 0 }];
     const { reorderItems } = await import('../actions');
 
-    await reorderItems('list-1', ['item-a', 'item-x']);
+    await expect(reorderItems('list-1', ['item-a', 'item-x'])).rejects.toThrow(
+      /list changed while you were dragging/i,
+    );
 
     expect(updateCalls).toHaveLength(0);
   });

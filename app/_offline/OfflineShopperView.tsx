@@ -12,7 +12,12 @@ import {
   PageHeader,
 } from '@sovereignfs/ui';
 import { offline } from '@sovereignfs/sdk/offline';
-import { drainQueue, offlineQueue, type SyncOutcome } from '@sovereignfs/sdk/offline-queue';
+import {
+  drainQueue,
+  offlineQueue,
+  OfflineQueueFullError,
+  type SyncOutcome,
+} from '@sovereignfs/sdk/offline-queue';
 import { createList } from '../_lib/actions';
 import { applyOneMutation, applyPending, type PendingMutation } from '../_lib/offline-apply';
 import { resolveIcon } from '../_lib/icons';
@@ -80,6 +85,12 @@ export function OfflineShopperView() {
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  /** The queued mutation the server refused, if any. The sync endpoint applies
+   *  a batch in order and halts at the first failure, so one permanently
+   *  un-appliable change (e.g. an add to a list that has since been archived)
+   *  blocks every later change from ever syncing — retrying alone can never
+   *  clear that. Holding its id is what lets the user discard just that one. */
+  const [failedMutationId, setFailedMutationId] = useState<string | null>(null);
   const [addValue, setAddValue] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -128,6 +139,9 @@ export function OfflineShopperView() {
         setSyncError(
           `${result.failed.length} change${result.failed.length === 1 ? '' : 's'} couldn't sync — ${result.failed[0]?.error ?? 'unknown error'}`,
         );
+        setFailedMutationId(result.failed[0]?.id ?? null);
+      } else {
+        setFailedMutationId(null);
       }
       if (result.applied.length > 0 || result.skipped.length > 0) {
         // Reconcile with canonical server state rather than patching
@@ -214,11 +228,41 @@ export function OfflineShopperView() {
     if (target) setSelectedListId(target.id);
   }, [accessibleLists, selectedListId, view]);
 
+  /** Applies a mutation to the local view immediately, then durably queues it.
+   *  The optimistic update is rolled back if the queue write itself fails
+   *  (a full queue, or IndexedDB unavailable in a private window) — otherwise
+   *  the change sits on screen looking saved while nothing will ever sync it. */
   async function enqueueAndApply(mutation: PendingMutation) {
     if (!view) return;
+    const previousView = view;
     setView((v) => (v ? applyOneMutation(v, mutation) : v));
-    await offlineQueue.enqueue(SHOPPER_PLUGIN_ID, mutation.op, mutation.payload);
+    try {
+      await offlineQueue.enqueue(SHOPPER_PLUGIN_ID, mutation.op, mutation.payload);
+    } catch (error) {
+      setView(previousView);
+      setSyncError(
+        error instanceof OfflineQueueFullError
+          ? "Too many changes are waiting to sync — connect and sync before making more."
+          : "Couldn't save that change on this device.",
+      );
+      return;
+    }
     setPendingCount((c) => c + 1);
+    if (navigator.onLine) void sync();
+  }
+
+  /** Drops the one mutation the server keeps refusing, then re-derives the
+   *  view from the cached baseline plus the remaining queue and lets the rest
+   *  drain. The discarded change is genuinely lost — that's the point, it can
+   *  never apply — so the button that calls this says so. */
+  async function discardFailed() {
+    if (!failedMutationId) return;
+    await offlineQueue.remove(SHOPPER_PLUGIN_ID, failedMutationId);
+    setFailedMutationId(null);
+    setSyncError(null);
+    const cached = await offline.get<OfflineSnapshot>(SHOPPER_PLUGIN_ID, SNAPSHOT_KEY);
+    if (cached) await rebuildView(cached);
+    else setPendingCount((await offlineQueue.list(SHOPPER_PLUGIN_ID)).length);
     if (navigator.onLine) void sync();
   }
 
@@ -373,18 +417,25 @@ export function OfflineShopperView() {
     <PageContainer>
       <PageHeader title="Shopper" />
 
-      {pendingCount > 0 && (
+      {(pendingCount > 0 || syncError) && (
         <div className={styles.syncBar}>
-          <span>
-            {pendingCount} change{pendingCount === 1 ? '' : 's'} pending sync
-            {syncing ? '…' : ''}
-          </span>
+          {pendingCount > 0 && (
+            <span>
+              {pendingCount} change{pendingCount === 1 ? '' : 's'} pending sync
+              {syncing ? '…' : ''}
+            </span>
+          )}
           {syncError && !syncing && (
             <>
               <span className={styles.syncErrorText}>{syncError}</span>
               <Button variant="secondary" size="sm" onClick={() => void sync()}>
                 Retry
               </Button>
+              {failedMutationId && (
+                <Button variant="ghost" size="sm" onClick={() => void discardFailed()}>
+                  Discard this change
+                </Button>
+              )}
             </>
           )}
         </div>

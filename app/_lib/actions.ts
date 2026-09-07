@@ -138,10 +138,12 @@ export async function getAccessibleLists(): Promise<{ id: string; name: string }
   return [...owned, ...shared].map((l) => ({ id: l.id, name: l.name }));
 }
 
-/** Read-only roll-up of items across every accessible list (SHP-02). Always
- *  empty right now — item CRUD (add/edit/check-off) is T-05–T-09 — but the
- *  aggregation query is ready so this view starts working the moment those
- *  tasks land, with no changes needed here. */
+/** Read-only roll-up of the items still to buy across every accessible list
+ *  (SHP-02). Bought items are excluded, matching the per-list view where a
+ *  checked item leaves its category group for `BoughtSection` — this view has
+ *  no equivalent section (it's read-only, you un-buy from the item's own
+ *  list), so a bought item here would just be noise in a "what's left to
+ *  buy" roll-up. */
 export async function getCombinedItems(): Promise<CombinedItemRow[]> {
   const { db, tenantId } = await getContext();
   const accessible = await getAccessibleLists();
@@ -154,12 +156,14 @@ export async function getCombinedItems(): Promise<CombinedItemRow[]> {
     .where(
       and(
         eq(shopperListItems.tenantId, tenantId),
+        isNull(shopperListItems.checkedAt),
         inArray(
           shopperListItems.listId,
           accessible.map((l) => l.id),
         ),
       ),
-    );
+    )
+    .orderBy(asc(shopperListItems.sortOrder), asc(shopperListItems.createdAt));
 
   return rows.map((row) => ({
     id: row.id,
@@ -168,7 +172,6 @@ export async function getCombinedItems(): Promise<CombinedItemRow[]> {
     unit: row.unit,
     category: row.category,
     icon: row.icon,
-    checkedAt: row.checkedAt,
     sourceListId: row.listId,
     sourceListName: listNameById.get(row.listId) ?? 'Unknown list',
   }));
@@ -202,11 +205,41 @@ export async function setLastList(listId: string): Promise<void> {
     });
 }
 
+/** Throws when the user already owns a live list by this name (compared
+ *  case-insensitively, the same `normalize()` the product catalog uses).
+ *  Application-level rather than a unique index: archived lists keep their
+ *  names, so the constraint is "no two *visible* lists with one name", which
+ *  a DB index over (owner, name) can't express without also blocking a
+ *  re-use of an archived list's name. `exceptListId` skips the row being
+ *  renamed so re-saving an unchanged name isn't a conflict with itself. */
+async function assertListNameAvailable(
+  db: Db,
+  tenantId: string,
+  userId: string,
+  trimmed: string,
+  exceptListId?: string,
+): Promise<void> {
+  const rows = await db
+    .select({ id: shopperLists.id, name: shopperLists.name })
+    .from(shopperLists)
+    .where(
+      and(
+        eq(shopperLists.tenantId, tenantId),
+        eq(shopperLists.ownerUserId, userId),
+        isNull(shopperLists.archivedAt),
+      ),
+    );
+  const normalized = normalize(trimmed);
+  const clash = rows.some((row) => row.id !== exceptListId && normalize(row.name) === normalized);
+  if (clash) throw new Error(`You already have a list called “${trimmed}”.`);
+}
+
 export async function createList(name: string): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('List name is required.');
 
   const { db, userId, tenantId } = await getContext();
+  await assertListNameAvailable(db, tenantId, userId, trimmed);
   const id = randomUUID();
   const ts = now();
 
@@ -237,7 +270,8 @@ export async function renameList(listId: string, name: string): Promise<void> {
   if (!list) throw new Error('List not found.');
   if (list.role !== 'owner') throw new Error('Only the owner can rename this list.');
 
-  const { db, tenantId } = await getContext();
+  const { db, userId, tenantId } = await getContext();
+  await assertListNameAvailable(db, tenantId, userId, trimmed, listId);
   await db
     .update(shopperLists)
     .set({ name: trimmed, updatedAt: now() })
@@ -647,9 +681,11 @@ export async function clearBoughtItems(listId: string): Promise<void> {
  *  `sort_order`, so renumbering a dragged category's items to 0..n would
  *  collide with every other category's values and scramble which section
  *  renders first. Reassigning existing slots leaves every item outside
- *  `orderedIds` completely untouched. Bails out (no partial write) if any
- *  id doesn't resolve to a row on this list — a stale id from a concurrent
- *  edit elsewhere. */
+ *  `orderedIds` completely untouched. Throws (no partial write) if any id
+ *  doesn't resolve to a row on this list — a stale id from a concurrent edit
+ *  elsewhere. It used to return silently instead, which the caller couldn't
+ *  distinguish from success: the optimistic order stayed on screen until the
+ *  refresh snapped it back, with nothing explaining why. */
 export async function reorderItems(listId: string, orderedIds: string[]): Promise<void> {
   const list = await getList(listId);
   if (!list) throw new Error('List not found.');
@@ -667,7 +703,9 @@ export async function reorderItems(listId: string, orderedIds: string[]): Promis
         eq(shopperListItems.tenantId, tenantId),
       ),
     );
-  if (rows.length !== orderedIds.length) return;
+  if (rows.length !== orderedIds.length) {
+    throw new Error('This list changed while you were dragging — nothing was reordered.');
+  }
 
   const slots = rows.map((r) => r.sortOrder).sort((a, b) => a - b);
   await Promise.all(

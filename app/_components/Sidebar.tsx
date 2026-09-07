@@ -1,6 +1,6 @@
 'use client';
 
-import { ConfirmDialog, Icon } from '@sovereignfs/ui';
+import { ConfirmDialog, Icon, useCommitOnEnterOrBlur } from '@sovereignfs/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
@@ -24,6 +24,7 @@ export default function Sidebar({ lists, sharedLists }: Props) {
   const [editName, setEditName] = useState('');
   const [archiveTarget, setArchiveTarget] = useState<ListRow | null>(null);
   const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -34,27 +35,49 @@ export default function Sidebar({ lists, sharedLists }: Props) {
   function startRename(list: ListRow) {
     setEditingId(list.id);
     setEditName(list.name);
+    setError(null);
   }
 
+  /** Closes the editor on every commit attempt — including a failed one — and
+   *  reports the reason instead. Leaving the field open on failure would trap
+   *  focus: blur re-commits, so a name the server keeps rejecting could never
+   *  be clicked away from. */
   function commitRename(list: ListRow) {
     const trimmed = editName.trim();
     setEditingId(null);
-    if (trimmed && trimmed !== list.name) {
-      startTransition(async () => {
+    if (!trimmed || trimmed === list.name) return;
+    setError(null);
+    startTransition(async () => {
+      try {
         await renameList(list.id, trimmed);
         router.refresh();
-      });
-    }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not rename this list.');
+      }
+    });
   }
+
+  // Only ever one row is in rename mode, so the commit handlers can be built
+  // once here rather than per row inside the map (where a hook can't go).
+  const editingList = lists.find((l) => l.id === editingId) ?? null;
+  const renameHandlers = useCommitOnEnterOrBlur(() => {
+    if (editingList) commitRename(editingList);
+  });
 
   function confirmArchive() {
     const list = archiveTarget;
     if (!list) return;
+    setError(null);
     startTransition(async () => {
-      await archiveList(list.id);
-      setArchiveTarget(null);
-      if (pathname === `/shopper/lists/${list.id}`) router.push('/shopper');
-      router.refresh();
+      try {
+        await archiveList(list.id);
+        setArchiveTarget(null);
+        if (pathname === `/shopper/lists/${list.id}`) router.push('/shopper');
+        router.refresh();
+      } catch (err) {
+        setArchiveTarget(null);
+        setError(err instanceof Error ? err.message : 'Could not archive this list.');
+      }
     });
   }
 
@@ -82,6 +105,12 @@ export default function Sidebar({ lists, sharedLists }: Props) {
         </div>
       )}
 
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+
       <ul className={styles.list}>
         {lists.map((list) => {
           const href = `/shopper/lists/${list.id}`;
@@ -93,10 +122,13 @@ export default function Sidebar({ lists, sharedLists }: Props) {
                   ref={renameInputRef}
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  onBlur={() => commitRename(list)}
+                  onBlur={renameHandlers.onBlur}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitRename(list);
-                    if (e.key === 'Escape') setEditingId(null);
+                    renameHandlers.onKeyDown(e);
+                    if (e.key === 'Escape') {
+                      setEditingId(null);
+                      setError(null);
+                    }
                   }}
                   aria-label={`Rename ${list.name}`}
                   className={styles.renameInput}
@@ -126,7 +158,8 @@ export default function Sidebar({ lists, sharedLists }: Props) {
                       aria-label={`Archive ${list.name}`}
                       disabled={pending}
                     >
-                      <Icon name="trash-2" size="sm" aria-hidden />
+                      {/* An archive keeps the data; a trash can said otherwise. */}
+                      <Icon name="inbox" size="sm" aria-hidden />
                     </button>
                   </div>
                 </>

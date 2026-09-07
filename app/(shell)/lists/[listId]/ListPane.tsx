@@ -3,7 +3,7 @@
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { EmptyState, PageHeader } from '@sovereignfs/ui';
+import { EmptyState, PageHeader, useToast } from '@sovereignfs/ui';
 import { useRouter } from 'next/navigation';
 import { useOptimistic, useTransition } from 'react';
 import { reorderItems } from '../../../_lib/actions';
@@ -57,6 +57,10 @@ function itemsReducer(state: ListItemRow[], action: ItemAction): ListItemRow[] {
  */
 export default function ListPane({ listId, list, items, editingItem }: Props) {
   const router = useRouter();
+  // Safe under `shell: "default"` — the platform's ClientShell wraps every
+  // plugin page in a ToastProvider. A move to `shell: "minimal"` would mean
+  // mounting one in this plugin's own layout first.
+  const toast = useToast();
   const sensors = useReorderSensors();
   const [, startTransition] = useTransition();
   const [optimisticItems, dispatch] = useOptimistic(items, itemsReducer);
@@ -78,7 +82,17 @@ export default function ListPane({ listId, list, items, editingItem }: Props) {
     const ids = arrayMove(categoryItems, oldIndex, newIndex).map((item) => item.id);
     startTransition(async () => {
       dispatch({ type: 'reorder', ids });
-      await reorderItems(listId, ids);
+      try {
+        await reorderItems(listId, ids);
+      } catch (err) {
+        // The refresh below reverts the optimistic order on its own; without
+        // this the row would just snap back with nothing explaining why.
+        toast.show({
+          title: 'Order not saved',
+          message: err instanceof Error ? err.message : 'Could not reorder these items.',
+          category: 'error',
+        });
+      }
       router.refresh();
     });
   }

@@ -1,6 +1,13 @@
 .actions {
   display: flex;
+  align-items: center;
   gap: var(--sv-space-2);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--sv-font-size-sm);
+  color: var(--sv-color-error-text);
 }
 
 /* Mobile's `⋯` Menu trigger — same treatment as sovereign-tasks'

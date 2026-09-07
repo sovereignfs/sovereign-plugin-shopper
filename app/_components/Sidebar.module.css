@@ -168,6 +168,13 @@
   color: var(--sv-color-text-subtle);
 }
 
+.error {
+  margin: 0;
+  padding: 0 var(--sv-space-4) var(--sv-space-2);
+  font-size: var(--sv-font-size-sm);
+  color: var(--sv-color-error-text);
+}
+
 /* Shared-list rows stack a name + "shared by / role" line, unlike the
    single-line owned-list rows above — overrides .link's nowrap/ellipsis. */
 .sharedName {

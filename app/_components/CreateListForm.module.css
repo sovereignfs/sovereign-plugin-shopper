@@ -1,6 +1,16 @@
 .form {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sv-space-2);
+}
+
+/* Own line under the field — the form is a row, so the message claims the
+   full basis rather than squeezing in beside the input. */
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--sv-font-size-sm);
+  color: var(--sv-color-error-text);
 }
 
 /* Mirrors @sovereignfs/ui's Input styling — a native <input> is used here
