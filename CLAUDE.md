@@ -303,7 +303,7 @@ This plugin follows its own semver, independent of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.5.0** (`manifest.json` is the source of truth — this line
+Current version: **0.6.0** (`manifest.json` is the source of truth — this line
 has drifted before; check it there first)
 
 ## Running locally
@@ -373,3 +373,17 @@ rename/archive this list.'` for any non-owner role, same as
    checkable-list-row primitive (T-08).
 4. **Phase 1 → Phase 2 migration mechanics** — design before starting v0.2
    (roadmap T-12).
+5. ✅ **Severing a deleted account's attribution on other people's lists** —
+   resolved by platform **RFC 0097**: attribution columns are nullable and a
+   deletion handler sets them to `null`, counting those rows in the new
+   `DeletionResult.anonymized` rather than in `deleted`. A platform-wide
+   "deleted user" sentinel was considered and rejected (invisible to the type
+   system; needs hand-exclusion from every filter and aggregate forever; buys
+   nothing at render time because `sdk.directory.resolveUsers()` returns
+   nothing for it either way). `added_by`/`purchased_by` are now nullable in
+   both dialect schemas (migration `0002`), and `deleteAllShopperData` severs
+   after its ownership-scoped deletes — what still matches is exactly the set
+   of rows on other people's lists. **When a UI eventually renders either
+   column, render `null` as no byline at all**, not "Deleted user" (RFC 0097
+   §4). `sovereign-tasks` has the same gap on `assignee_id` and has not yet
+   adopted this.
