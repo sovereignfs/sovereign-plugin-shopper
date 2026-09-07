@@ -7,8 +7,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "db:generate:sqlite": "drizzle-kit generate --schema db/schema.ts --out migrations/sqlite --dialect sqlite",
-    "db:generate:pg": "drizzle-kit generate --schema db/schema.postgres.ts --out migrations/postgres --dialect postgresql"
+    "db:generate:sqlite": "drizzle-kit generate --schema app/_db/schema.ts --out migrations/sqlite --dialect sqlite",
+    "db:generate:pg": "drizzle-kit generate --schema app/_db/schema.postgres.ts --out migrations/postgres --dialect postgresql"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

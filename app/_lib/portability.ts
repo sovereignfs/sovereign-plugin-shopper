@@ -90,7 +90,9 @@ interface ExportListItem {
   icon: string | null;
   sortOrder: number;
   checkedAt: number | null;
-  addedBy: string;
+  /** Null once severed by account deletion (RFC 0097). Import always rewrites
+   *  this to the importing user, so it is never read back. */
+  addedBy: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -105,7 +107,8 @@ interface ExportPurchase {
   unit: string | null;
   price: number | null;
   currency: string | null;
-  purchasedBy: string;
+  /** Null once severed by account deletion (RFC 0097) — see `addedBy`. */
+  purchasedBy: string | null;
   purchasedAt: number;
 }
 
@@ -377,6 +380,26 @@ async function importShopperData(section: PluginExportSection, ctx: ImportContex
 
 // ---- Delete ----
 
+/**
+ * Removes this user's Shopper data on account deletion (RFC 0033), and severs
+ * the attribution they left on other people's lists (RFC 0097).
+ *
+ * Rows fall into three buckets, not two:
+ *
+ * 1. **Owned by this user** (`owner_user_id`) — deleted outright, along with
+ *    everything filed under a list they owned.
+ * 2. **Owned by someone else, attributed to this user** —
+ *    `shopper_list_items.added_by` on a list they only had editor access to,
+ *    and `shopper_purchases.purchased_by` on someone else's ledger entry.
+ *    Deleting these would be wrong: the item is the list owner's shopping
+ *    list, and the purchase is their ledger entry (v0.7 price history reads
+ *    it). The attribution is set to `null` and counted in `anonymized`.
+ * 3. **Owned by someone else, not attributed to this user** — untouched.
+ *
+ * Nothing in Phase 1's UI renders `added_by`/`purchased_by` yet. When one
+ * does, resolve through `sdk.directory.resolveUsers()` and render `null` as
+ * no byline at all rather than "Deleted user" — see RFC 0097 §4.
+ */
 async function deleteAllShopperData(ctx: DeletionContext): Promise<DeletionResult> {
   const db = ctx.db as Db;
   let deleted = 0;
@@ -460,5 +483,37 @@ async function deleteAllShopperData(ctx: DeletionContext): Promise<DeletionResul
     .where(and(eq(shopperUserState.tenantId, ctx.tenantId), eq(shopperUserState.userId, ctx.userId)));
   deleted += stateRows.length;
 
-  return { deleted };
+  // Everything above deletes by ownership. What remains attributed to this user
+  // are rows on *other people's* lists — the middle bucket of RFC 0097's
+  // three-way split: the row belongs to the list owner and must survive, so the
+  // attribution is severed rather than the row deleted. Running this after the
+  // deletes above is what makes the scope exact: any `added_by` still matching
+  // is on a list this user did not own, and any `purchased_by` still matching
+  // belongs to someone else's ledger. Scoped by tenant_id like every delete.
+  const orphanedItemRows = await db
+    .select({ id: shopperListItems.id })
+    .from(shopperListItems)
+    .where(and(eq(shopperListItems.tenantId, ctx.tenantId), eq(shopperListItems.addedBy, ctx.userId)));
+  if (orphanedItemRows.length > 0) {
+    await db
+      .update(shopperListItems)
+      .set({ addedBy: null })
+      .where(and(eq(shopperListItems.tenantId, ctx.tenantId), eq(shopperListItems.addedBy, ctx.userId)));
+  }
+
+  const orphanedPurchaseRows = await db
+    .select({ id: shopperPurchases.id })
+    .from(shopperPurchases)
+    .where(and(eq(shopperPurchases.tenantId, ctx.tenantId), eq(shopperPurchases.purchasedBy, ctx.userId)));
+  if (orphanedPurchaseRows.length > 0) {
+    await db
+      .update(shopperPurchases)
+      .set({ purchasedBy: null })
+      .where(and(eq(shopperPurchases.tenantId, ctx.tenantId), eq(shopperPurchases.purchasedBy, ctx.userId)));
+  }
+
+  // Severed rows are reported separately, never folded into `deleted` — they
+  // still exist, and `deleted` is the count an operator would cite to evidence
+  // an erasure request.
+  return { deleted, anonymized: orphanedItemRows.length + orphanedPurchaseRows.length };
 }

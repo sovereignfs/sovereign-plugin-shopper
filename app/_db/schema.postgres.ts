@@ -76,7 +76,7 @@ export const shopperListItems = pgTable('shopper_list_items', {
   icon: text('icon'),
   sortOrder: integer('sort_order').notNull().default(0),
   checkedAt: integer('checked_at'),
-  addedBy: text('added_by').notNull(),
+  addedBy: text('added_by'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
@@ -94,7 +94,7 @@ export const shopperPurchases = pgTable('shopper_purchases', {
   unit: text('unit'),
   price: integer('price'),
   currency: text('currency'),
-  purchasedBy: text('purchased_by').notNull(),
+  purchasedBy: text('purchased_by'),
   purchasedAt: integer('purchased_at').notNull(),
 });
 

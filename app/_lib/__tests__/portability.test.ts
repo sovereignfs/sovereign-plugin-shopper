@@ -1,6 +1,12 @@
 import { getTableName, type Table } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DeletionContext, ExportContext, ImportContext, PluginExportSection } from '@sovereignfs/sdk';
+import type {
+  DeletionContext,
+  DeletionResult,
+  ExportContext,
+  ImportContext,
+  PluginExportSection,
+} from '@sovereignfs/sdk';
 
 type Row = Record<string, unknown>;
 type Condition =
@@ -51,7 +57,7 @@ const capturedImporter = {
   fn: null as ((section: PluginExportSection, ctx: ImportContext) => Promise<void>) | null,
 };
 const capturedDeleter = {
-  fn: null as ((ctx: DeletionContext) => Promise<{ deleted: number; errors?: string[] }>) | null,
+  fn: null as ((ctx: DeletionContext) => Promise<DeletionResult>) | null,
 };
 
 vi.mock('@sovereignfs/sdk', () => ({
@@ -132,6 +138,20 @@ const fakeDb = {
     return {
       where: async (condition?: Condition) => {
         store[tableName] = (store[tableName] ?? []).filter((row) => !matches(row, condition));
+      },
+    };
+  },
+  update(table: Table) {
+    const tableName = getTableName(table);
+    return {
+      set(values: Row) {
+        return {
+          where: async (condition?: Condition) => {
+            for (const row of store[tableName] ?? []) {
+              if (matches(row, condition)) Object.assign(row, values);
+            }
+          },
+        };
       },
     };
   },
@@ -278,5 +298,56 @@ describe('portability delete', () => {
     expect(store.shopper_purchases).toEqual([]);
     expect(store.shopper_user_state).toEqual([]);
     expect(result?.deleted).toBeGreaterThan(0);
+  });
+
+  it("severs the user's attribution on other people's rows instead of deleting them (RFC 0097)", async () => {
+    const { registerPortabilityHandlers } = await import('../portability');
+    await registerPortabilityHandlers();
+
+    // list-2 belongs to `other`; u1 was an editor on it.
+    store.shopper_lists = [
+      { id: 'list-2', tenantId: 't1', ownerUserId: 'other', name: 'Not mine', kind: 'personal', createdBy: 'other', archivedAt: null, createdAt: 1, updatedAt: 1 },
+    ];
+    store.shopper_list_items = [
+      // u1 added this to someone else's list — must survive, attribution severed.
+      { id: 'item-theirs', tenantId: 't1', listId: 'list-2', productId: null, name: 'Bread', quantity: '1', unit: null, category: null, icon: null, sortOrder: 0, checkedAt: null, addedBy: 'u1', createdAt: 1, updatedAt: 1 },
+      // Untouched: someone else's row on someone else's list.
+      { id: 'item-other', tenantId: 't1', listId: 'list-2', productId: null, name: 'Eggs', quantity: '1', unit: null, category: null, icon: null, sortOrder: 1, checkedAt: null, addedBy: 'other', createdAt: 1, updatedAt: 1 },
+    ];
+    store.shopper_purchases = [
+      // Owned by `other`, purchased by u1 — their ledger entry, must survive.
+      { id: 'pur-theirs', tenantId: 't1', ownerUserId: 'other', listId: 'list-2', listItemId: 'item-theirs', productId: null, name: 'Bread', quantity: '1', unit: null, price: 200, currency: 'USD', purchasedBy: 'u1', purchasedAt: 1 },
+    ];
+
+    const result = await capturedDeleter.fn?.({ userId: 'u1', tenantId: 't1', db: fakeDb });
+
+    // The rows still exist — they belong to `other`.
+    expect(store.shopper_list_items).toHaveLength(2);
+    expect(store.shopper_purchases).toHaveLength(1);
+
+    // ...but no longer name the deleted account.
+    expect(store.shopper_list_items.find((r) => r.id === 'item-theirs')?.addedBy).toBeNull();
+    expect(store.shopper_purchases[0]?.purchasedBy).toBeNull();
+
+    // A third party's attribution is untouched.
+    expect(store.shopper_list_items.find((r) => r.id === 'item-other')?.addedBy).toBe('other');
+
+    // Severed rows are counted separately, never as deletions.
+    expect(result?.anonymized).toBe(2);
+    expect(result?.deleted).toBe(0);
+  });
+
+  it('does not sever attribution belonging to another tenant', async () => {
+    const { registerPortabilityHandlers } = await import('../portability');
+    await registerPortabilityHandlers();
+
+    store.shopper_list_items = [
+      { id: 'item-t2', tenantId: 't2', listId: 'list-9', productId: null, name: 'Rice', quantity: '1', unit: null, category: null, icon: null, sortOrder: 0, checkedAt: null, addedBy: 'u1', createdAt: 1, updatedAt: 1 },
+    ];
+
+    const result = await capturedDeleter.fn?.({ userId: 'u1', tenantId: 't1', db: fakeDb });
+
+    expect(store.shopper_list_items[0]?.addedBy).toBe('u1');
+    expect(result?.anonymized).toBe(0);
   });
 });

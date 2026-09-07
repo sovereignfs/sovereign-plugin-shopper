@@ -15,6 +15,13 @@
       "when": 1785362648953,
       "tag": "0001_complex_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788776294032,
+      "tag": "0002_tired_warstar",
+      "breakpoints": true
     }
   ]
 }
